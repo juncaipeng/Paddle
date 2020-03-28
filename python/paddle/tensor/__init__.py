@@ -15,3 +15,9 @@
 # TODO: import all tensor api under this directory, 
 # including tensor creation, manipulation, math, etc.
 # __all__ = [ ]
+
+from . import random
+from .random import *
+
+__all__ = []
+__all__ += random.__all__
