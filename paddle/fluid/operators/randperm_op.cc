@@ -54,7 +54,7 @@ class RandpermOpMaker : public framework::OpProtoAndCheckerMaker {
         "n",
         "(int). The upper bound (exclusive), and it should be greater than 0.");
     AddAttr<int>("dtype",
-                 "(str, optional). The data type of output tensor. "
+                 "(int, optional). The data type of output tensor. "
                  "Default: 3[int64].")
         .SetDefault(framework::proto::VarType::INT64);
     AddAttr<bool>("force_cpu",
