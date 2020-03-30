@@ -21,7 +21,7 @@
 #            'randint']
 
 from __future__ import print_function
-from ..fluid.framework import Variable
+from ..fluid.framework import device_guard
 from ..fluid.layer_helper import LayerHelper
 from ..fluid.data_feeder import convert_dtype, check_variable_and_dtype, check_type, check_dtype
 
@@ -31,7 +31,7 @@ __all__ = ['randperm']
 def randperm(n,
              out=None,
              dtype="int64",
-             force_cpu=False,
+             device=None,
              stop_gradient=True,
              seed=0):
     """
@@ -45,8 +45,9 @@ def randperm(n,
             Default: None.
         dtype (np.dtype|core.VarDesc.VarType|str, optional): The type of the 
             output Tensor. Supported data types: int64, int32. Default: int32.
-        force_cpu (bool, optional): Force the output variable to be saved in cpu
-            memory. Otherwise, save the output variable to the running device.
+        device (str, optional): Specific the output variable to be saved in cpu
+            or gpu memory. Supported None, 'cpu', 'gpu'. If it is None, the output
+            variable will be automatically assigned devices.
             Default: False.
         stop_gradient (bool, optional): Whether grad should record operations 
             on the returned tensor. Default: True.
@@ -63,6 +64,7 @@ def randperm(n,
         TypeError: The dtype must be one of int32 and int64, and the data type 
             of out Tensor must be the same as the dtype. 
         ValueError: The input n should be greater than 0 in randperm op.
+        ValueError: The input device should in [None, 'cpu', 'gpu'].
 
     Examples:
         .. code-block:: python
@@ -78,7 +80,7 @@ def randperm(n,
 	    data_2 = paddle.tensor.randperm(num, dtype="int32", seed=1)
 	    fluid.layers.Print(data_2)
 
-	    data_3 = paddle.tensor.randperm(num, stop_gradient=False, force_cpu=True)
+	    data_3 = paddle.tensor.randperm(num, stop_gradient=False, device="cpu")
 	    fluid.layers.Print(data_3)
 
 	    paddle.tensor.randperm(num, out=data_3)
@@ -92,27 +94,31 @@ def randperm(n,
     """
 
     if n < 1:
-        raise ValueError("The input n should be greater "
-                         "than 0 in randperm op.")
+        raise ValueError("The input n should be greater than 0 in randperm op.")
     check_dtype(dtype, 'dtype', ['int64', 'int32'], 'randperm')
-    check_type(force_cpu, 'force_cpu', bool, 'randperm')
-    check_type(stop_gradient, 'stop_gradient', bool, 'randperm')
-    check_type(seed, 'seed', int, 'randperm')
     dtype = convert_dtype(dtype)
+    if device not in [None, 'cpu', 'gpu']:
+        raise ValueError("The input device should in [None, 'cpu', 'gpu'].")
+    check_type(stop_gradient, 'stop_gradient', bool, 'randperm')
 
     helper = LayerHelper("randperm", **locals())
     if out is None:
-        out = helper.create_variable_for_type_inference(dtype)
-        if stop_gradient:
-            out.stop_gradient = True
+        out = helper.create_variable_for_type_inference(dtype=dtype)
     else:
-        check_type(out, 'out', Variable, 'randperm')
         check_variable_and_dtype(out, 'out', [dtype], 'randperm')
+    if stop_gradient:
+        out.stop_gradient = True
 
     inputs = dict()
     outputs = {'Out': [out]}
-    attrs = {'n': n, 'force_cpu': force_cpu, 'dtype': out.dtype, 'seed': seed}
+    attrs = {'n': n, 'dtype': out.dtype, 'seed': seed}
 
-    helper.append_op(
-        type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
+    if device is None:
+        helper.append_op(
+            type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
+    else:
+        with device_guard(device):
+            helper.append_op(
+                type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
+
     return out

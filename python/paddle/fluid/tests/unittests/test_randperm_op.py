@@ -40,12 +40,14 @@ def convert_dtype(dtype_str):
     return dtype_num_list[dtype_str_list.index(dtype_str)]
 
 
-class TestUniformRandomOp(OpTest):
+class TestRandpermOp(OpTest):
+    """ Test randperm op."""
+
     def setUp(self):
         self.op_type = "randperm"
         self.n = 200
         self.dtype = "int64"
-        self.force_cpu = False
+        self.device = None
         self.seed = 0
 
         self.inputs = {}
@@ -54,7 +56,7 @@ class TestUniformRandomOp(OpTest):
         self.attrs = {
             "n": self.n,
             "dtype": convert_dtype(self.dtype),
-            "force_cpu": self.force_cpu,
+            "device": self.device,
             "seed": self.seed,
         }
 
@@ -71,27 +73,44 @@ class TestUniformRandomOp(OpTest):
                 "be equal, out = " + str(out_np))
 
 
-class TestUniformRandomOp_attr_n(TestUniformRandomOp):
+class TestRandpermOp_attr_n(TestRandpermOp):
+    """ Test randperm op for attr n. """
+
     def init_attrs(self):
         self.n = 10000
 
 
-class TestUniformRandomOp_attr_int32(TestUniformRandomOp):
+class TestRandpermOp_attr_int32(TestRandpermOp):
+    """ Test randperm op for attr int32 dtype. """
+
     def init_attrs(self):
         self.dtype = "int32"
 
 
-class TestUniformRandomOp_attr_force_cpu(TestUniformRandomOp):
+class TestRandpermOp_attr_device_cpu(TestRandpermOp):
+    """ Test randperm op for cpu device. """
+
     def init_attrs(self):
-        self.force_cpu = True
+        self.device = "cpu"
 
 
-class TestUniformRandomOp_attr_seed(TestUniformRandomOp):
+class TestRandpermOp_attr_device_gpu(TestRandpermOp):
+    """ Test randperm op for gpu device. """
+
+    def init_attrs(self):
+        self.device = "gpu"
+
+
+class TestRandpermOp_attr_seed(TestRandpermOp):
+    """ Test randperm op for attr seed. """
+
     def init_attrs(self):
         self.seed = 10
 
 
 class TestRandpermOpError(unittest.TestCase):
+    """ Test randperm op for raise error. """
+
     def test_errors(self):
         main_prog = Program()
         start_prog = Program()
@@ -109,7 +128,9 @@ class TestRandpermOpError(unittest.TestCase):
             self.assertRaises(ValueError, test_value)
 
 
-class TestUniformRandomOp_attr_out(unittest.TestCase):
+class TestRandpermOp_attr_out(unittest.TestCase):
+    """ Test randperm op for attr out. """
+
     def test_attr_tensor_API(self):
         startup_program = fluid.Program()
         train_program = fluid.Program()
@@ -118,7 +139,7 @@ class TestUniformRandomOp_attr_out(unittest.TestCase):
             data_1 = fluid.layers.fill_constant([n], "int64", 3)
             paddle.tensor.randperm(n=n, out=data_1)
 
-            data_2 = paddle.tensor.randperm(n=n, dtype="int32", force_cpu=True)
+            data_2 = paddle.tensor.randperm(n=n, dtype="int32", device="cpu")
 
             place = fluid.CPUPlace()
             if fluid.core.is_compiled_with_cuda():

@@ -44,12 +44,11 @@ class RandpermKernel : public framework::OpKernel<T> {
   void Compute(const framework::ExecutionContext& ctx) const override {
     int n = ctx.Attr<int>("n");
     unsigned int seed = static_cast<unsigned int>(ctx.Attr<int>("seed"));
-    bool force_cpu = ctx.Attr<bool>("force_cpu");
     framework::Variable* out_var = ctx.OutputVar("Out");
     framework::Tensor* out_tensor =
         framework::GetMutableLoDTensorOrSelectedRowsValueFromVar(out_var);
 
-    if (force_cpu || platform::is_cpu_place(ctx.GetPlace())) {
+    if (platform::is_cpu_place(ctx.GetPlace())) {
       T* out_data = out_tensor->mutable_data<T>(platform::CPUPlace());
       random_permate<T>(out_data, n, seed);
     } else {
