@@ -48,7 +48,7 @@ def randperm(n,
         device (str, optional): Specific the output variable to be saved in cpu
             or gpu memory. Supported None, 'cpu', 'gpu'. If it is None, the output
             variable will be automatically assigned devices.
-            Default: False.
+            Default: None.
         stop_gradient (bool, optional): Whether grad should record operations 
             on the returned tensor. Default: True.
         seed (int, optional): Random seed used for permute samples. If seed is 
@@ -113,12 +113,8 @@ def randperm(n,
     outputs = {'Out': [out]}
     attrs = {'n': n, 'dtype': out.dtype, 'seed': seed}
 
-    if device is None:
+    with device_guard(device):
         helper.append_op(
             type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
-    else:
-        with device_guard(device):
-            helper.append_op(
-                type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
 
     return out
