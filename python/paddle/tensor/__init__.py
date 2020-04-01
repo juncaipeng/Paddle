@@ -169,6 +169,3 @@ from .random import randperm
 # from .search import index_select   #DEFINE_ALIAS
 # from .search import nonzero   #DEFINE_ALIAS
 # from .search import sort   #DEFINE_ALIAS
-
-__all__ = []
-__all__ += random.__all__

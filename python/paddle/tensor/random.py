@@ -20,7 +20,6 @@
 #            'rand',
 #            'randint']
 
-from __future__ import print_function
 from ..fluid.framework import device_guard
 from ..fluid.layer_helper import LayerHelper
 from ..fluid.data_feeder import convert_dtype, check_variable_and_dtype, check_type, check_dtype
@@ -28,6 +27,7 @@ from ..fluid.data_feeder import convert_dtype, check_variable_and_dtype, check_t
 __all__ = ['randperm']
 
 
+@templatedoc()
 def randperm(n,
              out=None,
              dtype="int64",
