@@ -30,6 +30,11 @@ def check_randperm_out(n, data_np):
     return list(gt_sorted == out_sorted)
 
 
+def error_msg(data_np):
+    return "The sorted ground truth and sorted out should " + \
+ "be equal, out = " + str(data_np)
+
+
 def convert_dtype(dtype_str):
     dtype_str_list = ["int32", "int64"]
     dtype_num_list = [2, 3]
@@ -66,9 +71,8 @@ class TestRandpermOp(OpTest):
 
     def verify_output(self, outs):
         out_np = np.array(outs[0])
-        self.assertTrue(check_randperm_out(self.n, out_np),
-            msg="The sorted ground truth and sorted out should " + \
-                "be equal, out = " + str(out_np))
+        self.assertTrue(
+            check_randperm_out(self.n, out_np), msg=error_msg(out_np))
 
 
 class TestRandpermOp_attr_n(TestRandpermOp):
@@ -148,9 +152,23 @@ class TestRandpermOp_attr_out(unittest.TestCase):
             outs = exe.run(train_program, fetch_list=[data_1, data_2])
 
             out_np = np.array(outs[0])
-            self.assertTrue(check_randperm_out(n, out_np),
-                msg="The sorted ground truth and sorted out should " + \
-                    "be equal, out = " + str(out_np))
+            self.assertTrue(
+                check_randperm_out(n, out_np), msg=error_msg(out_np))
+
+
+class TestRandpermDygraphMode(unittest.TestCase):
+    def test_check_output(self):
+        with fluid.dygraph.guard():
+            n = 10
+            data_1 = paddle.tensor.randperm(n, dtype="int64")
+            data_1_np = data_1.numpy()
+            self.assertTrue(
+                check_randperm_out(n, data_1_np), msg=error_msg(data_1_np))
+
+            data_2 = paddle.tensor.randperm(n, dtype="int32", device="cpu")
+            data_2_np = data_2.numpy()
+            self.assertTrue(
+                check_randperm_out(n, data_2_np), msg=error_msg(data_2_np))
 
 
 if __name__ == "__main__":

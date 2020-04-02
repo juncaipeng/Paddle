@@ -20,7 +20,8 @@
 #            'rand',
 #            'randint']
 
-from ..fluid.framework import device_guard
+from ..fluid import core
+from ..fluid.framework import device_guard, in_dygraph_mode, _varbase_creator
 from ..fluid.layers.layer_function_generator import templatedoc
 from ..fluid.layer_helper import LayerHelper
 from ..fluid.data_feeder import convert_dtype, check_variable_and_dtype, check_type, check_dtype
@@ -102,20 +103,31 @@ def randperm(n,
         raise ValueError("The input device should in [None, 'cpu', 'gpu'].")
     check_type(stop_gradient, 'stop_gradient', bool, 'randperm')
 
-    helper = LayerHelper("randperm", **locals())
-    if out is None:
-        out = helper.create_variable_for_type_inference(dtype=dtype)
-    else:
-        check_variable_and_dtype(out, 'out', [dtype], 'randperm')
-    if stop_gradient:
-        out.stop_gradient = True
-
     inputs = dict()
-    outputs = {'Out': [out]}
-    attrs = {'n': n, 'dtype': out.dtype, 'seed': seed}
-
-    with device_guard(device):
-        helper.append_op(
-            type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
-
-    return out
+    if in_dygraph_mode():
+        if out is None:
+            out = _varbase_creator(dtype=dtype)
+        else:
+            check_variable_and_dtype(out, 'out', [dtype], 'randperm')
+        if stop_gradient:
+            out.stop_gradient = True
+        outputs = {'Out': [out]}
+        attrs = {'n': n, 'dtype': out.dtype, 'seed': seed}
+        core.ops.randperm(inputs, attrs, outputs)
+        if stop_gradient:
+            out.stop_gradient = True
+        return out
+    else:
+        helper = LayerHelper("randperm", **locals())
+        if out is None:
+            out = helper.create_variable_for_type_inference(dtype=dtype)
+        else:
+            check_variable_and_dtype(out, 'out', [dtype], 'randperm')
+        if stop_gradient:
+            out.stop_gradient = True
+        outputs = {'Out': [out]}
+        attrs = {'n': n, 'dtype': out.dtype, 'seed': seed}
+        with device_guard(device):
+            helper.append_op(
+                type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
+        return out
