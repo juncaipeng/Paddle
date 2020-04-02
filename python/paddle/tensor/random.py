@@ -21,6 +21,7 @@
 #            'randint']
 
 from ..fluid.framework import device_guard
+from ..fluid.layers.layer_function_generator import templatedoc
 from ..fluid.layer_helper import LayerHelper
 from ..fluid.data_feeder import convert_dtype, check_variable_and_dtype, check_type, check_dtype
 
