@@ -103,31 +103,17 @@ def randperm(n,
         raise ValueError("The input device should in [None, 'cpu', 'gpu'].")
     check_type(stop_gradient, 'stop_gradient', bool, 'randperm')
 
-    inputs = dict()
-    if in_dygraph_mode():
-        if out is None:
-            out = _varbase_creator(dtype=dtype)
-        else:
-            check_variable_and_dtype(out, 'out', [dtype], 'randperm')
-        if stop_gradient:
-            out.stop_gradient = True
-        outputs = {'Out': [out]}
-        attrs = {'n': n, 'dtype': out.dtype, 'seed': seed}
-        core.ops.randperm(inputs, attrs, outputs)
-        if stop_gradient:
-            out.stop_gradient = True
-        return out
+    helper = LayerHelper("randperm", **locals())
+    if out is None:
+        out = helper.create_variable_for_type_inference(dtype=dtype)
     else:
-        helper = LayerHelper("randperm", **locals())
-        if out is None:
-            out = helper.create_variable_for_type_inference(dtype=dtype)
-        else:
-            check_variable_and_dtype(out, 'out', [dtype], 'randperm')
-        if stop_gradient:
-            out.stop_gradient = True
-        outputs = {'Out': [out]}
-        attrs = {'n': n, 'dtype': out.dtype, 'seed': seed}
-        with device_guard(device):
-            helper.append_op(
-                type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
-        return out
+        check_variable_and_dtype(out, 'out', [dtype], 'randperm')
+    if stop_gradient:
+        out.stop_gradient = True
+    inputs = dict()
+    outputs = {'Out': [out]}
+    attrs = {'n': n, 'dtype': out.dtype, 'seed': seed}
+    with device_guard(device):
+        helper.append_op(
+            type='randperm', inputs=inputs, outputs=outputs, attrs=attrs)
+    return out
