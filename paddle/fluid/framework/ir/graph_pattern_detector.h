@@ -1470,6 +1470,87 @@ struct MultiGruSeq : public PatternBase {
   PATTERN_DECL_NODE(h2);
 };
 
+// Conv with batch norm
+// op: conv + (elementwise_add +) batch_norm
+// named nodes:
+// conv_weight, conv_out, conv,
+// bn_x, bn_scale, bn_bias, bn_mean,  bn_variance,
+// bn_batch_norm, bn_y, bn_mean_out, bn_variance_out,
+// bn_saved_mean, bn_saved_variance
+struct FuseConvBN : public PatternBase {
+  FuseConvBN(PDPattern* pattern, const std::string& name_scope)
+      : PatternBase(pattern, name_scope, "conv_bn") {}
+
+  PDNode* operator()(PDNode* conv_input, const std::string& conv_type,
+                     bool with_eltwise_add);
+
+  // declare operator node's name
+  PATTERN_DECL_NODE(conv);
+  PATTERN_DECL_NODE(batch_norm);
+  PATTERN_DECL_NODE(eltwise);  // ELEMENTWISE_ADD
+  // CONV inputs
+  PATTERN_DECL_NODE(conv_weight);  // Filter
+  // CONV outputs
+  PATTERN_DECL_NODE(conv_out);  // tmp
+  // ELTWISE inputs
+  PATTERN_DECL_NODE(eltwise_y_in);
+  // ELTWISE outputs
+  PATTERN_DECL_NODE(eltwise_out);  // tmp
+  // BN inputs
+  PATTERN_DECL_NODE(bn_scale);
+  PATTERN_DECL_NODE(bn_bias);
+  PATTERN_DECL_NODE(bn_mean);
+  PATTERN_DECL_NODE(bn_variance);
+  // BN outputs
+  PATTERN_DECL_NODE(bn_out);  // Out
+  PATTERN_DECL_NODE(bn_mean_out);
+  PATTERN_DECL_NODE(bn_variance_out);
+  PATTERN_DECL_NODE(bn_saved_mean);
+  PATTERN_DECL_NODE(bn_saved_variance);
+};
+
+// The backward of bn(conv(x))
+// op: bn_grad + conv_grad
+// bn_grad inputs: x, y_grad, scale, bias, save_mean, save_variance
+// bn_grad outputs: x_grad, scale_grad, bias_grad
+// conv_grad inputs: input, filter, output_grad
+// conv_grad outputs: input_grad(optional), filter_grad
+struct FuseConvBNGrad : public PatternBase {
+  FuseConvBNGrad(PDPattern* pattern, const std::string& name_scope)
+      : PatternBase(pattern, name_scope, "fuse_conv_bn_grad") {}
+
+  PDNode* operator()(const std::string& conv_grad_type,
+                     const std::string& opt_type, bool has_conv_input_grad);
+
+  // op nodes
+  PATTERN_DECL_NODE(bn_grad);
+  PATTERN_DECL_NODE(conv_grad);
+
+  // var nodes
+  PATTERN_DECL_NODE(bn_in_x);
+  PATTERN_DECL_NODE(bn_in_y_grad);
+  PATTERN_DECL_NODE(bn_in_scale);
+  PATTERN_DECL_NODE(bn_in_bias);
+  PATTERN_DECL_NODE(bn_in_save_mean);
+  PATTERN_DECL_NODE(bn_in_save_variance);
+
+  PATTERN_DECL_NODE(bn_out_x_grad);
+  PATTERN_DECL_NODE(bn_out_scale_grad);
+  PATTERN_DECL_NODE(bn_out_bias_grad);
+
+  PATTERN_DECL_NODE(conv_in_input);
+  PATTERN_DECL_NODE(conv_in_filter);
+  // conv_in_output_grad is bn_out_x_grad
+
+  PATTERN_DECL_NODE(conv_out_input_grad);
+  PATTERN_DECL_NODE(conv_out_filter_grad);
+
+  PATTERN_DECL_NODE(bn_in_scale_opt);
+  PATTERN_DECL_NODE(bn_in_scale_opt_out);
+  PATTERN_DECL_NODE(bn_in_bias_opt);
+  PATTERN_DECL_NODE(bn_in_bias_opt_out);
+};
+
 }  // namespace patterns
 
 // Link two ir::Nodes from each other.

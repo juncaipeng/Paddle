@@ -121,7 +121,7 @@ bool GraphPatternDetector::MarkPDNodesInGraph(const ir::Graph &graph) {
   // Check to early stop if some PDNode can't find matched Node.
   for (auto &pdnode : pattern_.nodes()) {
     if (!pdnodes2nodes_.count(pdnode.get())) {
-      VLOG(4) << pdnode->name() << " can't find matched Node, early stop";
+      VLOG(1) << pdnode->name() << " can't find matched Node, early stop";
       // return false;
     }
   }
@@ -2613,6 +2613,181 @@ PDNode *patterns::MultiGruSeq::operator()() {
   gru1->LinksFrom({x, wx11, wx12, wh11, wh12, b11, b12}).LinksTo({h1});
   gru2->LinksFrom({h1, wx21, wx22, wh21, wh22, b21, b22}).LinksTo({h2});
   return h2;
+}
+
+PDNode *patterns::FuseConvBN::operator()(
+    paddle::framework::ir::PDNode *conv_input, const std::string &conv_type,
+    bool with_eltwise_add) {
+  // Create Operators
+  conv_input->assert_is_op_input(conv_type, "Input");
+  auto *conv_op = pattern->NewNode(conv_repr())->assert_is_op(conv_type);
+
+  PDNode *eltwise_op = nullptr;
+  if (with_eltwise_add) {
+    eltwise_op =
+        pattern->NewNode(eltwise_repr())->assert_is_op("elementwise_add");
+  }
+  auto *batch_norm_op =
+      pattern->NewNode(batch_norm_repr())->assert_is_op("batch_norm");
+  // Create variables
+  // Conv Filter
+  auto *conv_weight_var = pattern->NewNode(conv_weight_repr())
+                              ->assert_is_op_input(conv_type, "Filter");
+
+  auto *conv_out_var = pattern->NewNode(conv_out_repr())
+                           ->assert_is_op_output(conv_type, "Output");
+
+  PDNode *eltwise_y_in_var = nullptr;
+  PDNode *eltwise_out_var = nullptr;
+  if (with_eltwise_add) {
+    // Conv output as Bias input
+    conv_out_var->assert_is_op_input("elementwise_add", "X");
+    // Bias
+    eltwise_y_in_var = pattern->NewNode(eltwise_y_in_repr())
+                           ->assert_is_op_input("elementwise_add", "Y")
+                           ->AsInput();
+    eltwise_out_var = pattern->NewNode(eltwise_out_repr())
+                          ->AsIntermediate()
+                          ->assert_is_only_output_of_op("elementwise_add");
+  } else {
+    // Conv output as BN input
+    conv_out_var->assert_is_op_input("batch_norm", "X");
+  }
+
+  // BN Scale
+  auto *bn_scale_var = pattern->NewNode(bn_scale_repr())
+                           ->AsInput()
+                           ->assert_is_op_input("batch_norm", "Scale");
+  // BN Bias
+  auto *bn_bias_var = pattern->NewNode(bn_bias_repr())
+                          ->AsInput()
+                          ->assert_is_op_input("batch_norm", "Bias");
+  // BN Mean
+  auto *bn_mean_var = pattern->NewNode(bn_mean_repr())
+                          ->AsInput()
+                          ->assert_is_op_input("batch_norm", "Mean");
+  // BN Variance
+  auto *bn_variance_var = pattern->NewNode(bn_variance_repr())
+                              ->AsInput()
+                              ->assert_is_op_input("batch_norm", "Variance");
+
+  // BN output
+  auto *bn_out_var = pattern->NewNode(bn_out_repr())
+                         ->AsOutput()
+                         ->assert_is_op_output("batch_norm", "Y");
+
+  auto *bn_mean_out_var = pattern->NewNode(bn_mean_out_repr())
+                              ->AsOutput()
+                              ->assert_is_op_output("batch_norm", "MeanOut");
+
+  auto *bn_variance_out_var =
+      pattern->NewNode(bn_variance_out_repr())
+          ->AsOutput()
+          ->assert_is_op_output("batch_norm", "VarianceOut");
+
+  auto *bn_saved_mean_var =
+      pattern->NewNode(bn_saved_mean_repr())
+          ->AsOutput()
+          ->assert_is_op_output("batch_norm", "SavedMean");
+
+  auto *bn_saved_variance_var =
+      pattern->NewNode(bn_saved_variance_repr())
+          ->AsOutput()
+          ->assert_is_op_output("batch_norm", "SavedVariance");
+
+  conv_op->LinksFrom({conv_input, conv_weight_var}).LinksTo({conv_out_var});
+
+  if (with_eltwise_add) {
+    eltwise_op->LinksFrom({conv_out_var, eltwise_y_in_var})
+        .LinksTo({eltwise_out_var});
+    batch_norm_op
+        ->LinksFrom({eltwise_out_var, bn_scale_var, bn_bias_var, bn_mean_var,
+                     bn_variance_var})
+        .LinksTo({bn_out_var, bn_mean_out_var, bn_variance_out_var,
+                  bn_saved_mean_var, bn_saved_variance_var});
+  } else {
+    batch_norm_op
+        ->LinksFrom({conv_out_var, bn_scale_var, bn_bias_var, bn_mean_var,
+                     bn_variance_var})
+        .LinksTo({bn_out_var, bn_mean_out_var, bn_variance_out_var,
+                  bn_saved_mean_var, bn_saved_variance_var});
+  }
+  return bn_out_var;
+}
+
+PDNode *patterns::FuseConvBNGrad::operator()(const std::string &conv_grad_type,
+                                             const std::string &opt_type,
+                                             bool conv_has_input_grad) {
+  std::string bn_grad_type = "batch_norm_grad";
+  auto *bn_grad = pattern->NewNode(bn_grad_repr())
+                      ->assert_is_op(bn_grad_type)
+                      ->assert_op_attr<bool>("use_global_stats", false);
+  auto *conv_grad =
+      pattern->NewNode(conv_grad_repr())->assert_is_op(conv_grad_type);
+
+  auto *bn_in_x =
+      pattern->NewNode(bn_in_x_repr())->assert_is_op_input(bn_grad_type, "X");
+  auto *bn_in_y_grad = pattern->NewNode(bn_in_y_grad_repr())
+                           ->assert_is_op_input(bn_grad_type, GradVarName("Y"));
+  auto *bn_in_scale = pattern->NewNode(bn_in_scale_repr())
+                          ->assert_is_op_input(bn_grad_type, "Scale");
+  auto *bn_in_bias = pattern->NewNode(bn_in_bias_repr())
+                         ->assert_is_op_input(bn_grad_type, "Bias");
+  auto *bn_in_save_mean = pattern->NewNode(bn_in_save_mean_repr())
+                              ->assert_is_op_input(bn_grad_type, "SavedMean");
+  auto *bn_in_save_variance =
+      pattern->NewNode(bn_in_save_variance_repr())
+          ->assert_is_op_input(bn_grad_type, "SavedVariance");
+
+  auto *bn_out_x_grad =
+      pattern->NewNode(bn_out_x_grad_repr())
+          ->assert_is_op_output(bn_grad_type, GradVarName("X"));
+  auto *bn_out_scale_grad =
+      pattern->NewNode(bn_out_scale_grad_repr())
+          ->assert_is_op_output(bn_grad_type, GradVarName("Scale"));
+  auto *bn_out_bias_grad =
+      pattern->NewNode(bn_out_bias_grad_repr())
+          ->assert_is_op_output(bn_grad_type, GradVarName("Bias"));
+
+  auto *conv_in_input = pattern->NewNode(conv_in_input_repr())
+                            ->assert_is_op_input(conv_grad_type, "Input");
+  auto *conv_in_filter = pattern->NewNode(conv_in_filter_repr())
+                             ->assert_is_op_input(conv_grad_type, "Filter");
+  // conv_in_output_grad is bn_out_x_grad
+
+  auto *bn_in_scale_opt =
+      pattern->NewNode(bn_in_scale_opt_repr())->assert_is_op(opt_type);
+  auto *bn_in_scale_opt_out = pattern->NewNode(bn_in_scale_opt_out_repr())
+                                  ->assert_is_op_output(opt_type, "ParamOut");
+  auto *bn_in_bias_opt =
+      pattern->NewNode(bn_in_bias_opt_repr())->assert_is_op(opt_type);
+  auto *bn_in_bias_opt_out = pattern->NewNode(bn_in_bias_opt_out_repr())
+                                 ->assert_is_op_output(opt_type, "ParamOut");
+
+  PDNode *conv_out_input_grad = nullptr;
+  if (conv_has_input_grad) {
+    conv_out_input_grad =
+        pattern->NewNode(conv_out_input_grad_repr())
+            ->assert_is_op_output(conv_grad_type, GradVarName("Input"));
+  }
+  auto *conv_out_filter_grad =
+      pattern->NewNode(conv_out_filter_grad_repr())
+          ->assert_is_op_output(conv_grad_type, GradVarName("Filter"));
+
+  bn_grad
+      ->LinksFrom({bn_in_x, bn_in_y_grad, bn_in_scale, bn_in_bias,
+                   bn_in_save_mean, bn_in_save_variance})
+      .LinksTo({bn_out_x_grad, bn_out_scale_grad, bn_out_bias_grad});
+  if (conv_has_input_grad) {
+    conv_grad->LinksFrom({conv_in_input, conv_in_filter, bn_out_x_grad})
+        .LinksTo({conv_out_filter_grad, conv_out_input_grad});
+  } else {
+    conv_grad->LinksFrom({conv_in_input, conv_in_filter, bn_out_x_grad})
+        .LinksTo({conv_out_filter_grad});
+  }
+  bn_in_scale_opt->LinksFrom({bn_in_scale}).LinksTo({bn_in_scale_opt_out});
+  bn_in_bias_opt->LinksFrom({bn_in_bias}).LinksTo({bn_in_bias_opt_out});
+  return conv_grad;
 }
 
 }  // namespace ir
