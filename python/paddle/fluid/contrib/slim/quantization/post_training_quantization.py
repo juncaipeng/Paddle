@@ -254,7 +254,7 @@ class PostTrainingQuantization(object):
         ]
         self._support_weight_quantize_type = ['abs_max', 'channel_wise_abs_max']
         self._support_algo_type = ['KL', 'abs_max', 'min_max']
-        self._dynamic_quantize_op_type = ['lstm']
+        self._dynamic_quantize_op_type = ['lstm', 'gru']
         self._support_quantize_op_type = \
             list(set(QuantizationTransformPass._supported_quantizable_op_type +
                 AddQuantDequantPass._supported_quantizable_op_type +
@@ -805,6 +805,7 @@ class PostTrainingQuantization(object):
             for var_name in _get_op_input_var_names(op):
                 if var_name in persistable_var_names:
                     var_data = _load_variable_data(self._scope, var_name)
+                    # TODO(pjc): collect per-channel thresholds
                     threshold = float(np.max(np.abs(var_data)))
                     argname, index = _get_input_name_index(op, var_name)
                     op._set_attr(argname + str(index) + "_threshold", threshold)

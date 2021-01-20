@@ -121,6 +121,7 @@ _op_real_in_out_name = {
     "hard_sigmoid": [["X"], ["Out"]],
     "gru": [["Input", "Weight"], ["Hidden"]],
     "lstm": [["Input", "Weight"], ["Hidden"]],
+    "gru": [["Input", "Weight"], ["Hidden"]],
 }
 
 _conv_ops = ['conv2d', 'depthwise_conv2d', 'conv2d_transpose']
